@@ -44,11 +44,8 @@ from nova import utils
 server_opts = [
     cfg.BoolOpt('enable_instance_password',
                 default=True,
-                help='Enables returning of the instance password by the'
-                     ' relevant server API calls such as create, rebuild'
-                     ' or rescue, If the hypervisor does not support'
-                     ' password injection then the password returned will'
-                     ' not be correct'),
+                help='Allows use of instance password during '
+                     'server creation'),
 ]
 CONF = cfg.CONF
 CONF.register_opts(server_opts)
@@ -643,7 +640,7 @@ class Controller(wsgi.Controller):
                     network_uuid = None
                     if not utils.is_neutron():
                         # port parameter is only for neutron v2.0
-                        msg = _("Unknown argument : port")
+                        msg = _("Unknown argment : port")
                         raise exc.HTTPBadRequest(explanation=msg)
                     if not uuidutils.is_uuid_like(port_id):
                         msg = _("Bad port format: port uuid is "
@@ -669,7 +666,7 @@ class Controller(wsgi.Controller):
                     msg = _("Invalid fixed IP address (%s)") % address
                     raise exc.HTTPBadRequest(explanation=msg)
 
-                # For neutronv2, requested_networks
+                # For neutronv2, requestd_networks
                 # should be tuple of (network_uuid, fixed_ip, port_id)
                 if utils.is_neutron():
                     networks.append((network_uuid, address, port_id))
@@ -745,6 +742,10 @@ class Controller(wsgi.Controller):
     @wsgi.deserializers(xml=CreateDeserializer)
     def create(self, req, body):
         """Creates a new server for a given user."""
+        #Petter
+	LOG.error('******** Petter TEST we are in the create function!')
+	#LOG.error('Request body: ',body)
+
         if not self.is_valid_body(body, 'server'):
             raise exc.HTTPUnprocessableEntity()
 
@@ -809,7 +810,15 @@ class Controller(wsgi.Controller):
             raise exc.HTTPBadRequest(explanation=msg)
 
         # optional openstack extensions:
-        key_name = None
+        #Petter
+	qemu_commandline = None
+	try:
+            qemu_commandline = self._qemu_commandline_from_req_data(body)
+        except ValueError as error:
+            msg = _("Invalid qemu_commandline provided.")
+            raise exc.HTTPBadRequest(explanation=msg)
+
+	key_name = None
         if self.ext_mgr.is_loaded('os-keypairs'):
             key_name = server_dict.get('key_name')
 
@@ -898,7 +907,7 @@ class Controller(wsgi.Controller):
             _get_inst_type = flavors.get_flavor_by_flavor_id
             inst_type = _get_inst_type(flavor_id, ctxt=context,
                                        read_deleted="no")
-
+	    #Petter inserted qemu_commandline parameter
             (instances, resv_id) = self.compute_api.create(context,
                             inst_type,
                             image_uuid,
@@ -919,6 +928,7 @@ class Controller(wsgi.Controller):
                             config_drive=config_drive,
                             block_device_mapping=block_device_mapping,
                             auto_disk_config=auto_disk_config,
+			    qemu_commandline=qemu_commandline,
                             scheduler_hints=scheduler_hints,
                             legacy_bdm=legacy_bdm)
         except exception.QuotaError as error:
@@ -933,7 +943,6 @@ class Controller(wsgi.Controller):
             raise exc.HTTPBadRequest(explanation=msg)
         except exception.FlavorNotFound as error:
             msg = _("Invalid flavorRef provided.")
-            raise exc.HTTPBadRequest(explanation=msg)
         except exception.KeypairNotFound as error:
             msg = _("Invalid key_name provided.")
             raise exc.HTTPBadRequest(explanation=msg)
@@ -953,7 +962,6 @@ class Controller(wsgi.Controller):
                 exception.InstanceTypeNotFound,
                 exception.InvalidMetadata,
                 exception.InvalidRequest,
-                exception.MultiplePortsNotApplicable,
                 exception.PortNotFound,
                 exception.SecurityGroupNotFound,
                 exception.InvalidBDM) as error:
@@ -1189,6 +1197,19 @@ class Controller(wsgi.Controller):
             image_uuid = self._image_uuid_from_href(image_href)
             return image_uuid
 
+    #Petter
+    def _qemu_commandline_from_req_data(self, data):
+        try:
+	    LOG.error('Parsing qemu_commandline')
+            qemu_commandline_args = data['server']['qemu_commandline']
+        except (TypeError, KeyError):
+            msg = _("Missing qemu_commandline attribute")
+	    qemu_commandline_args = None
+            #raise exc.HTTPBadRequest(explanation=msg)
+
+        return qemu_commandline_args
+	
+
     def _flavor_id_from_req_data(self, data):
         try:
             flavor_ref = data['server']['flavorRef']
@@ -1373,8 +1394,7 @@ class Controller(wsgi.Controller):
 
         instance = self._get_server(context, req, id)
 
-        bdms = self.compute_api.get_instance_bdms(context, instance,
-                                                  legacy=False)
+        bdms = self.compute_api.get_instance_bdms(context, instance)
 
         try:
             if self.compute_api.is_volume_backed_instance(context, instance,
@@ -1386,8 +1406,7 @@ class Controller(wsgi.Controller):
                     # device is set to 'vda'. It needs to be fixed later,
                     # but tentatively we use it here.
                     image_meta = {'properties': self.compute_api.
-                                    _get_bdm_image_metadata(context, bdms,
-                                                            legacy_bdm=False)}
+                                    _get_bdm_image_metadata(context, bdms)}
                 else:
                     src_image = self.compute_api.image_service.\
                                                 show(context, img)

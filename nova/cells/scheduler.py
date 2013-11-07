@@ -271,7 +271,9 @@ class CellsScheduler(base.Base):
 
     def _schedule_build_to_cells(self, message, instance_uuids,
             filter_properties, method, method_kwargs):
-        """Pick a cell where we should create a new instance(s)."""
+        """Pick a cell where we should create a new instance(s)."""i
+	#Petter
+	LOG.error('Scheduling instance: ',instance_uuids)
         try:
             for i in xrange(max(0, CONF.cells.scheduler_retries) + 1):
                 try:

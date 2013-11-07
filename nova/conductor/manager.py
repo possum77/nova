@@ -14,6 +14,8 @@
 
 """Handles database requests from other nova services."""
 
+import copy
+
 from nova.api.ec2 import ec2utils
 from nova import block_device
 from nova.cells import rpcapi as cells_rpcapi
@@ -74,7 +76,7 @@ class ConductorManager(manager.Manager):
     namespace.  See the ComputeTaskManager class for details.
     """
 
-    RPC_API_VERSION = '1.60'
+    RPC_API_VERSION = '1.58'
 
     def __init__(self, *args, **kwargs):
         super(ConductorManager, self).__init__(service_name='conductor',
@@ -218,8 +220,6 @@ class ConductorManager(manager.Manager):
                                                    host, key)
         return jsonutils.to_primitive(aggregates)
 
-    # NOTE(danms): This method is now deprecated and can be removed in
-    # version 2.0 of the RPC API
     def aggregate_metadata_add(self, context, aggregate, metadata,
                                set_delete=False):
         new_metadata = self.db.aggregate_metadata_add(context.elevated(),
@@ -227,8 +227,6 @@ class ConductorManager(manager.Manager):
                                                       metadata, set_delete)
         return jsonutils.to_primitive(new_metadata)
 
-    # NOTE(danms): This method is now deprecated and can be removed in
-    # version 2.0 of the RPC API
     @rpc_common.client_exceptions(exception.AggregateMetadataNotFound)
     def aggregate_metadata_delete(self, context, aggregate, key):
         self.db.aggregate_metadata_delete(context.elevated(),
@@ -372,8 +370,6 @@ class ConductorManager(manager.Manager):
     def instance_info_cache_delete(self, context, instance):
         self.db.instance_info_cache_delete(context, instance['uuid'])
 
-    # NOTE(hanlind): This method is now deprecated and can be removed in
-    # version v2.0 of the RPC API.
     def instance_info_cache_update(self, context, instance, values):
         self.db.instance_info_cache_update(context, instance['uuid'],
                                            values)
@@ -558,44 +554,27 @@ class ConductorManager(manager.Manager):
     def compute_unrescue(self, context, instance):
         self.compute_api.unrescue(context, instance)
 
-    def _object_dispatch(self, target, method, context, args, kwargs):
-        """Dispatch a call to an object method.
-
-        This ensures that object methods get called and any exception
-        that is raised gets wrapped in a ClientException for forwarding
-        back to the caller (without spamming the conductor logs).
-        """
-        try:
-            # NOTE(danms): Keep the getattr inside the try block since
-            # a missing method is really a client problem
-            return getattr(target, method)(context, *args, **kwargs)
-        except Exception:
-            raise rpc_common.ClientException()
-
     def object_class_action(self, context, objname, objmethod,
                             objver, args, kwargs):
         """Perform a classmethod action on an object."""
         objclass = nova_object.NovaObject.obj_class_from_name(objname,
                                                               objver)
-        return self._object_dispatch(objclass, objmethod, context,
-                                     args, kwargs)
+        return getattr(objclass, objmethod)(context, *args, **kwargs)
 
     def object_action(self, context, objinst, objmethod, args, kwargs):
         """Perform an action on an object."""
-        oldobj = objinst.obj_clone()
-        result = self._object_dispatch(objinst, objmethod, context,
-                                       args, kwargs)
+        oldobj = copy.copy(objinst)
+        result = getattr(objinst, objmethod)(context, *args, **kwargs)
         updates = dict()
         # NOTE(danms): Diff the object with the one passed to us and
         # generate a list of changes to forward back
-        for name, field in objinst.fields.items():
-            if not objinst.obj_attr_is_set(name):
+        for field in objinst.fields:
+            if not objinst.obj_attr_is_set(field):
                 # Avoid demand-loading anything
                 continue
-            if (not oldobj.obj_attr_is_set(name) or
-                    oldobj[name] != objinst[name]):
-                updates[name] = field.to_primitive(objinst, name,
-                                                   objinst[name])
+            if (not oldobj.obj_attr_is_set(field) or
+                    oldobj[field] != objinst[field]):
+                updates[field] = objinst._attr_to_primitive(field)
         # This is safe since a field named this would conflict with the
         # method anyway
         updates['obj_what_changed'] = objinst.obj_what_changed()
@@ -755,7 +734,11 @@ class ComputeTaskManager(base.Base):
             security_groups, block_device_mapping, legacy_bdm=True):
         request_spec = scheduler_utils.build_request_spec(context, image,
                                                           instances)
-        # NOTE(alaski): For compatibility until a new scheduler method is used.
+        
+	#Petter
+        LOG.error('********** manager build_instances')
+
+	# NOTE(alaski): For compatibility until a new scheduler method is used.
         request_spec.update({'block_device_mapping': block_device_mapping,
                              'security_group': security_groups})
         self.scheduler_rpcapi.run_instance(context, request_spec=request_spec,
@@ -763,6 +746,17 @@ class ComputeTaskManager(base.Base):
                 requested_networks=requested_networks, is_first_time=True,
                 filter_properties=filter_properties,
                 legacy_bdm_in_spec=legacy_bdm)
+
+	#Petter
+        LOG.error('i********** checking instance state after scheduling')
+        for instance in instances:
+                state = instance['vm_state']
+		uuid = instance['uuid']
+                LOG.error('instance %s has state %s',uuid,state)
+                if (state == vm_states.ERROR):
+                     #error state here means scheduling failed
+                     LOG.error('Scheduling failed for instance %s',instance.instance_uuid)
+
 
     def _get_image(self, context, image_id):
         if not image_id:
@@ -806,9 +800,7 @@ class ComputeTaskManager(base.Base):
                     instance.vm_state = vm_states.ERROR
                     instance.save()
 
-            filter_properties = {}
-            hosts = self._schedule_instances(context, image,
-                                             filter_properties, instance)
+            hosts = self._schedule_instances(context, image, [], instance)
             host = hosts.pop(0)['host']
             self.compute_rpcapi.unshelve_instance(context, instance, host,
                     image)

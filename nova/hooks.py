@@ -95,6 +95,8 @@ def add_hook(name, pass_function=False):
     def outer(f):
         @functools.wraps(f)
         def inner(*args, **kwargs):
+	    #Petter
+	    LOG.error('in add_hook f inner')
             manager = _HOOKS.setdefault(name, HookManager(name))
 
             function = None
@@ -102,9 +104,12 @@ def add_hook(name, pass_function=False):
                 function = f
 
             manager.run_pre(name, args, kwargs, f=function)
-            rv = f(*args, **kwargs)
+            #Petter
+	    LOG.error('in add_hook args 1')
+	    rv = f(*args, **kwargs)
+	    LOG.error('in add_hook args 2')
             manager.run_post(name, rv, args, kwargs, f=function)
-
+	    LOG.error('in add_hook args 3')
             return rv
 
         return inner

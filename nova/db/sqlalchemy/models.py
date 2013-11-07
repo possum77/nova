@@ -117,6 +117,9 @@ class ComputeNode(BASE, NovaBase):
     # '{"vendor_id":"8086", "product_id":"1234", "count":3 }'
     pci_stats = Column(Text)
 
+    #Petter
+    shared_memory_adapter_ip = Column(String(255), nullable=True)
+
 
 class ComputeNodeStat(BASE, NovaBase):
     """Stats related to the current workload of a compute host that are
@@ -298,6 +301,8 @@ class Instance(BASE, NovaBase):
     # Records whether an instance has been deleted from disk
     cleaned = Column(Integer, default=0)
 
+    #Petter qemu-commandline
+    qemu_commandline = Column(String(255))
 
 class InstanceInfoCache(BASE, NovaBase):
     """
@@ -588,7 +593,7 @@ class BlockDeviceMapping(BASE, NovaBase):
     volume_id = Column(String(36))
     volume_size = Column(Integer)
 
-    image_id = Column(String(36))
+    image_id = Column('image_id', String(36))
 
     # for no device to suppress devices.
     no_device = Column(Boolean)
@@ -738,7 +743,7 @@ class Migration(BASE, NovaBase):
     # NOTE(tr3buchet): the ____compute variables are instance['host']
     source_compute = Column(String(255))
     dest_compute = Column(String(255))
-    # nodes are equivalent to a compute node's 'hypervisor_hostname'
+    # nodes are equivalent to a compute node's 'hypvervisor_hostname'
     source_node = Column(String(255))
     dest_node = Column(String(255))
     # NOTE(tr3buchet): dest_host, btw, is an ip address

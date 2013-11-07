@@ -14,33 +14,34 @@
 
 from nova import db
 from nova.objects import base
-from nova.objects import fields
+from nova.objects import utils
 
 
 class ComputeNode(base.NovaPersistentObject, base.NovaObject):
     # Version 1.0: Initial version
     # Version 1.1: Added get_by_service_id()
-    # Version 1.2: String attributes updated to support unicode
-    VERSION = '1.2'
+    VERSION = '1.1'
 
     fields = {
-        'id': fields.IntegerField(),
-        'service_id': fields.IntegerField(),
-        'vcpus': fields.IntegerField(),
-        'memory_mb': fields.IntegerField(),
-        'local_gb': fields.IntegerField(),
-        'vcpus_used': fields.IntegerField(),
-        'memory_mb_used': fields.IntegerField(),
-        'local_gb_used': fields.IntegerField(),
-        'hypervisor_type': fields.StringField(),
-        'hypervisor_version': fields.IntegerField(),
-        'hypervisor_hostname': fields.StringField(nullable=True),
-        'free_ram_mb': fields.IntegerField(nullable=True),
-        'free_disk_gb': fields.IntegerField(nullable=True),
-        'current_workload': fields.IntegerField(nullable=True),
-        'running_vms': fields.IntegerField(nullable=True),
-        'cpu_info': fields.StringField(nullable=True),
-        'disk_available_least': fields.IntegerField(nullable=True),
+        'id': int,
+        'service_id': int,
+        'vcpus': int,
+        'memory_mb': int,
+        'local_gb': int,
+        'vcpus_used': int,
+        'memory_mb_used': int,
+        'local_gb_used': int,
+        'hypervisor_type': str,
+        'hypervisor_version': int,
+        'hypervisor_hostname': utils.str_or_none,
+        'free_ram_mb': utils.int_or_none,
+        'free_disk_gb': utils.int_or_none,
+        'current_workload': utils.int_or_none,
+        'running_vms': utils.int_or_none,
+        'cpu_info': utils.str_or_none,
+        'disk_available_least': utils.int_or_none,
+	#Petter
+	'shared_memory_adapter_ip': utils.str_or_none,
         }
 
     @staticmethod
